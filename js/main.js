@@ -65,96 +65,66 @@
       return true;
     }
 
-    // Nota tipo campanita / marimba: seno con armónico suave y caída rápida
-    function bell(freq, opts) {
+    // Tono "piano eléctrico" cálido (FM suave): ataque redondo, brillo que se apaga
+    function tone(freq, opts) {
       if (!enabled || !ctx) return;
       opts = opts || {};
       var t = ctx.currentTime + (opts.delay || 0);
-      var dur = opts.dur || 0.6, vol = opts.vol || 0.04;
-      [[1, 1], [2, 0.12]].forEach(function (h) {
-        var o = ctx.createOscillator();
-        var g = ctx.createGain();
-        o.type = 'sine';
-        o.frequency.value = freq * h[0];
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(vol * h[1], t + 0.03);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + dur / h[0]);
-        o.connect(g); g.connect(master); g.connect(verb);
-        o.start(t); o.stop(t + dur + 0.05);
-      });
-    }
-
-    function breeze(dur, vol) {
-      if (!enabled || !ctx) return;
-      var len = Math.floor(ctx.sampleRate * dur);
-      var buf = ctx.createBuffer(1, len, ctx.sampleRate);
-      var d = buf.getChannelData(0);
-      for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-      var src = ctx.createBufferSource();
-      src.buffer = buf;
-      var f = ctx.createBiquadFilter();
-      f.type = 'lowpass'; f.Q.value = 0.5;
-      var t = ctx.currentTime;
-      f.frequency.setValueAtTime(400, t);
-      f.frequency.exponentialRampToValueAtTime(1800, t + dur * 0.5);
-      f.frequency.exponentialRampToValueAtTime(500, t + dur);
-      var g = ctx.createGain();
+      var dur = opts.dur || 1.2, vol = opts.vol || 0.02;
+      var car = ctx.createOscillator(), mod = ctx.createOscillator();
+      var modGain = ctx.createGain(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+      car.type = 'sine'; mod.type = 'sine';
+      car.frequency.value = freq;
+      mod.frequency.value = freq * 2;
+      // el brillo (índice FM) empieza leve y desaparece rápido: suena a tecla de fieltro
+      modGain.gain.setValueAtTime(freq * 0.6, t);
+      modGain.gain.exponentialRampToValueAtTime(freq * 0.02, t + 0.35);
+      lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 0.2;
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(vol, t + dur * 0.45);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.025);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      src.connect(f); f.connect(g); g.connect(master); g.connect(verb);
-      src.start(t);
+      mod.connect(modGain); modGain.connect(car.frequency);
+      car.connect(lp); lp.connect(g); g.connect(master); g.connect(verb);
+      car.start(t); mod.start(t);
+      car.stop(t + dur + 0.05); mod.stop(t + dur + 0.05);
     }
 
-    // Fondo musical: acordes suaves que cambian lentamente (Cmaj9, Am9, Fmaj9, G6)
-    var CHORDS = [
-      [130.81, 196.0, 246.94, 293.66, 329.63],
-      [110.0, 164.81, 196.0, 246.94, 261.63],
-      [87.31, 174.61, 220.0, 261.63, 329.63],
-      [98.0, 146.83, 196.0, 246.94, 329.63]
-    ];
+    // Fondo: un solo tono cálido (quinta abierta) que "respira" muy despacio
     function startAmbient() {
       if (ambient || !ctx) return;
       var out = ctx.createGain();
       out.gain.value = 0.0001;
       var lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass'; lp.frequency.value = 700; lp.Q.value = 0.3;
+      lp.type = 'lowpass'; lp.frequency.value = 520; lp.Q.value = 0.4;
+      // el filtro se abre y cierra lentamente (ciclo de ~14 s)
+      var lfo = ctx.createOscillator(), lfoGain = ctx.createGain();
+      lfo.frequency.value = 0.07; lfoGain.gain.value = 160;
+      lfo.connect(lfoGain); lfoGain.connect(lp.frequency);
       lp.connect(out); out.connect(master); out.connect(verb);
-      var voices = CHORDS[0].map(function (f, i) {
-        var o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain();
-        o.type = 'sine'; o2.type = 'sine';
-        o.frequency.value = f; o2.frequency.value = f; o2.detune.value = 4;
-        g.gain.value = i === 0 ? 0.5 : 0.28;
-        o.connect(g); o2.connect(g); g.connect(lp);
-        o.start(); o2.start();
-        return [o, o2];
+      var oscs = [[110.0, 0], [110.0, 5], [164.81, -4], [220.0, 3]].map(function (v, i) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = v[0]; o.detune.value = v[1];
+        g.gain.value = i < 2 ? 0.5 : 0.22;
+        o.connect(g); g.connect(lp); o.start();
+        return o;
       });
-      out.gain.exponentialRampToValueAtTime(0.022, ctx.currentTime + 6);
-      var idx = 0;
-      var timer = setInterval(function () {
-        idx = (idx + 1) % CHORDS.length;
-        var t = ctx.currentTime;
-        voices.forEach(function (v, i) {
-          v.forEach(function (o) { o.frequency.setTargetAtTime(CHORDS[idx][i], t, 1.2); });
-        });
-        // nota de campanita al cambiar de acorde
-        bell(CHORDS[idx][4] * 2, { vol: 0.005, dur: 2.6 });
-      }, 9000);
-      ambient = { out: out, voices: voices, timer: timer };
+      lfo.start();
+      out.gain.exponentialRampToValueAtTime(0.018, ctx.currentTime + 6);
+      ambient = { out: out, oscs: oscs.concat([lfo]) };
     }
 
     function stopAmbient() {
       if (!ambient) return;
       var a = ambient; ambient = null;
-      clearInterval(a.timer);
       var t = ctx.currentTime;
       a.out.gain.cancelScheduledValues(t);
       a.out.gain.setValueAtTime(Math.max(a.out.gain.value, 0.0001), t);
       a.out.gain.exponentialRampToValueAtTime(0.0001, t + 2);
-      setTimeout(function () { a.voices.forEach(function (v) { v.forEach(function (o) { o.stop(); }); }); }, 2200);
+      setTimeout(function () { a.oscs.forEach(function (o) { o.stop(); }); }, 2200);
     }
 
-    var PENTA = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
+    // Notas de La mayor (A, C#, E, F#): siempre consonantes entre sí
+    var NOTES = [440.0, 554.37, 659.25, 739.99, 880.0];
     var lastHover = 0;
 
     return {
@@ -165,7 +135,8 @@
         if (on) {
           if (ctx.state === 'suspended') ctx.resume();
           startAmbient();
-          bell(523.25, { vol: 0.015, dur: 1 }); bell(659.25, { vol: 0.012, delay: 0.15, dur: 1 }); bell(783.99, { vol: 0.012, delay: 0.3, dur: 1 });
+          // firma sonora de Tarea Total: tres notas ascendentes
+          tone(440.0, { vol: 0.02, dur: 1.6 }); tone(659.25, { vol: 0.016, delay: 0.16, dur: 1.6 }); tone(1108.73, { vol: 0.012, delay: 0.32, dur: 2 });
         } else {
           stopAmbient();
         }
@@ -173,14 +144,14 @@
       resume: function () { if (ctx && ctx.state === 'suspended') ctx.resume(); },
       hover: function () {
         var now = Date.now();
-        if (now - lastHover < 250) return;
+        if (now - lastHover < 300) return;
         lastHover = now;
-        bell(PENTA[Math.floor(Math.random() * PENTA.length)] * 2, { vol: 0.0025, dur: 0.4 });
+        tone(1318.51, { vol: 0.0025, dur: 0.25 });
       },
-      click: function () { bell(659.25, { vol: 0.012, dur: 0.6 }); bell(987.77, { vol: 0.007, delay: 0.07, dur: 0.6 }); },
-      whoosh: function () { breeze(1.3, 0.01); },
-      blip: function (n) { bell(PENTA[n % PENTA.length], { vol: 0.008, dur: 0.5 }); },
-      chime: function () { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { bell(f, { vol: 0.012, delay: i * 0.13, dur: 1.3 }); }); }
+      click: function () { tone(659.25, { vol: 0.016, dur: 0.9 }); tone(880.0, { vol: 0.01, delay: 0.05, dur: 0.9 }); },
+      whoosh: function () { tone(NOTES[Math.floor(Math.random() * 3)] / 2, { vol: 0.012, dur: 1.4 }); },
+      blip: function (n) { tone(NOTES[n % NOTES.length], { vol: 0.01, dur: 0.9 }); },
+      chime: function () { [440.0, 554.37, 659.25, 880.0].forEach(function (f, i) { tone(f, { vol: 0.014, delay: i * 0.12, dur: 1.4 }); }); }
     };
   })();
 
