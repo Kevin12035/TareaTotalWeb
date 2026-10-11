@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Política de privacidad | Tarea Total</title>
-  <meta name="description" content="Cómo Tarea Total recopila y usa tus datos de contacto.">
+  <meta name="description" content="Cómo Tarea Total recopila, usa y protege tus datos de contacto cuando nos escribes por WhatsApp, correo o redes sociales.">
   <meta name="theme-color" content="#7848B5">
   <link rel="canonical" href="https://tareatotalec.com/privacidad.html">
   <link rel="icon" href="img/fotoperfil.jpg">
@@ -55,9 +55,15 @@
       <p>Puedes pedir que corrijamos o borremos tus datos en cualquier momento escribiendo a <a href="mailto:tareatotalec@gmail.com">tareatotalec@gmail.com</a>.</p>
 
       <h2>Contacto</h2>
-      <p>Tarea Total · Ecuador · WhatsApp <a href="https://wa.me/message/CJ7JGCPVLRFPI1" target="_blank" rel="noopener">+593 95 946 2343</a></p>
+      <p>Tarea Total · Ecuador · WhatsApp <a href="https://wa.me/message/CJ7JGCPVLRFPI1" target="_blank" rel="noopener" data-loc="privacidad">+593 95 946 2343</a></p>
     </article>
   </div>
 </main>
+<script>
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href*="wa.me/"]');
+    if (a && typeof window.gtag === 'function') window.gtag('event', 'whatsapp_click', { ubicacion: a.getAttribute('data-loc') || 'otro' });
+  });
+</script>
 </body>
 </html>
