@@ -34,7 +34,20 @@
 
   /* ---------- Sonido (Web Audio, sin archivos) ---------- */
   var Sound = (function () {
-    var ctx = null, master = null, ambient = null, enabled = false;
+    var ctx = null, master = null, verb = null, ambient = null, enabled = false;
+
+    // Reverberación suave generada (sin archivos)
+    function makeReverb(seconds) {
+      var len = Math.floor(ctx.sampleRate * seconds);
+      var buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (var ch = 0; ch < 2; ch++) {
+        var d = buf.getChannelData(ch);
+        for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+      }
+      var c = ctx.createConvolver();
+      c.buffer = buf;
+      return c;
+    }
 
     function init() {
       if (ctx) return true;
@@ -42,28 +55,36 @@
       if (!AC) return false;
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = 0.9;
-      master.connect(ctx.destination);
+      master.gain.value = 0.7;
+      var comp = ctx.createDynamicsCompressor();
+      master.connect(comp); comp.connect(ctx.destination);
+      verb = ctx.createGain();
+      verb.gain.value = 0.35;
+      var conv = makeReverb(2.8);
+      verb.connect(conv); conv.connect(master);
       return true;
     }
 
-    function tone(freq, dur, opts) {
+    // Nota tipo campanita / marimba: seno con armónico suave y caída rápida
+    function bell(freq, opts) {
       if (!enabled || !ctx) return;
       opts = opts || {};
       var t = ctx.currentTime + (opts.delay || 0);
-      var o = ctx.createOscillator();
-      var g = ctx.createGain();
-      o.type = opts.type || 'sine';
-      o.frequency.setValueAtTime(freq, t);
-      if (opts.to) o.frequency.exponentialRampToValueAtTime(opts.to, t + dur);
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(opts.vol || 0.05, t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(g); g.connect(master);
-      o.start(t); o.stop(t + dur + 0.02);
+      var dur = opts.dur || 0.6, vol = opts.vol || 0.04;
+      [[1, 1], [2, 0.25], [3.01, 0.08]].forEach(function (h) {
+        var o = ctx.createOscillator();
+        var g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.value = freq * h[0];
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vol * h[1], t + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur / h[0]);
+        o.connect(g); g.connect(master); g.connect(verb);
+        o.start(t); o.stop(t + dur + 0.05);
+      });
     }
 
-    function noise(dur, from, to, vol) {
+    function breeze(dur, vol) {
       if (!enabled || !ctx) return;
       var len = Math.floor(ctx.sampleRate * dur);
       var buf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -72,51 +93,69 @@
       var src = ctx.createBufferSource();
       src.buffer = buf;
       var f = ctx.createBiquadFilter();
-      f.type = 'bandpass'; f.Q.value = 1.4;
+      f.type = 'lowpass'; f.Q.value = 0.5;
       var t = ctx.currentTime;
-      f.frequency.setValueAtTime(from, t);
-      f.frequency.exponentialRampToValueAtTime(to, t + dur);
+      f.frequency.setValueAtTime(400, t);
+      f.frequency.exponentialRampToValueAtTime(1800, t + dur * 0.5);
+      f.frequency.exponentialRampToValueAtTime(500, t + dur);
       var g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(vol || 0.08, t + dur * 0.4);
+      g.gain.exponentialRampToValueAtTime(vol, t + dur * 0.45);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      src.connect(f); f.connect(g); g.connect(master);
+      src.connect(f); f.connect(g); g.connect(master); g.connect(verb);
       src.start(t);
     }
 
+    // Fondo musical: acordes suaves que cambian lentamente (Cmaj9, Am9, Fmaj9, G6)
+    var CHORDS = [
+      [130.81, 196.0, 246.94, 293.66, 329.63],
+      [110.0, 164.81, 196.0, 246.94, 261.63],
+      [87.31, 174.61, 220.0, 261.63, 329.63],
+      [98.0, 146.83, 196.0, 246.94, 329.63]
+    ];
     function startAmbient() {
       if (ambient || !ctx) return;
-      var g = ctx.createGain();
-      g.gain.value = 0.0001;
+      var out = ctx.createGain();
+      out.gain.value = 0.0001;
       var lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass'; lp.frequency.value = 420; lp.Q.value = 3;
-      var lfo = ctx.createOscillator();
-      var lfoGain = ctx.createGain();
-      lfo.frequency.value = 0.07; lfoGain.gain.value = 220;
-      lfo.connect(lfoGain); lfoGain.connect(lp.frequency);
-      var oscs = [55, 82.41, 110.3, 164.8].map(function (f, i) {
-        var o = ctx.createOscillator();
-        o.type = i % 2 ? 'triangle' : 'sawtooth';
-        o.frequency.value = f;
-        o.detune.value = (i - 1.5) * 6;
-        o.connect(lp);
-        o.start();
-        return o;
+      lp.type = 'lowpass'; lp.frequency.value = 1100; lp.Q.value = 0.3;
+      lp.connect(out); out.connect(master); out.connect(verb);
+      var voices = CHORDS[0].map(function (f, i) {
+        var o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o2.type = 'triangle';
+        o.frequency.value = f; o2.frequency.value = f; o2.detune.value = 7;
+        g.gain.value = i === 0 ? 0.5 : 0.28;
+        o.connect(g); o2.connect(g); g.connect(lp);
+        o.start(); o2.start();
+        return [o, o2];
       });
-      lp.connect(g); g.connect(master);
-      lfo.start();
-      g.gain.exponentialRampToValueAtTime(0.035, ctx.currentTime + 2.5);
-      ambient = { gain: g, oscs: oscs, lfo: lfo };
+      out.gain.exponentialRampToValueAtTime(0.05, ctx.currentTime + 4);
+      var idx = 0;
+      var timer = setInterval(function () {
+        idx = (idx + 1) % CHORDS.length;
+        var t = ctx.currentTime;
+        voices.forEach(function (v, i) {
+          v.forEach(function (o) { o.frequency.setTargetAtTime(CHORDS[idx][i], t, 1.2); });
+        });
+        // nota de campanita al cambiar de acorde
+        bell(CHORDS[idx][4] * 2, { vol: 0.012, dur: 2.2 });
+      }, 9000);
+      ambient = { out: out, voices: voices, timer: timer };
     }
 
     function stopAmbient() {
       if (!ambient) return;
       var a = ambient; ambient = null;
-      a.gain.gain.cancelScheduledValues(ctx.currentTime);
-      a.gain.gain.setValueAtTime(a.gain.gain.value, ctx.currentTime);
-      a.gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
-      setTimeout(function () { a.oscs.forEach(function (o) { o.stop(); }); a.lfo.stop(); }, 700);
+      clearInterval(a.timer);
+      var t = ctx.currentTime;
+      a.out.gain.cancelScheduledValues(t);
+      a.out.gain.setValueAtTime(Math.max(a.out.gain.value, 0.0001), t);
+      a.out.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+      setTimeout(function () { a.voices.forEach(function (v) { v.forEach(function (o) { o.stop(); }); }); }, 1400);
     }
+
+    var PENTA = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
+    var lastHover = 0;
 
     return {
       get on() { return enabled; },
@@ -126,17 +165,22 @@
         if (on) {
           if (ctx.state === 'suspended') ctx.resume();
           startAmbient();
-          tone(523, 0.12, { vol: 0.06 }); tone(784, 0.18, { vol: 0.05, delay: 0.08 });
+          bell(523.25, { vol: 0.035 }); bell(659.25, { vol: 0.03, delay: 0.12 }); bell(783.99, { vol: 0.03, delay: 0.24 });
         } else {
           stopAmbient();
         }
       },
       resume: function () { if (ctx && ctx.state === 'suspended') ctx.resume(); },
-      hover: function () { tone(1500, 0.05, { vol: 0.018 }); },
-      click: function () { tone(660, 0.09, { vol: 0.05, to: 1100, type: 'triangle' }); },
-      whoosh: function () { noise(0.55, 300, 3200, 0.06); },
-      blip: function (n) { tone(880 + n * 120, 0.08, { vol: 0.035 }); },
-      chime: function () { [523, 659, 784, 1046].forEach(function (f, i) { tone(f, 0.5, { vol: 0.04, delay: i * 0.09 }); }); }
+      hover: function () {
+        var now = Date.now();
+        if (now - lastHover < 90) return;
+        lastHover = now;
+        bell(PENTA[Math.floor(Math.random() * PENTA.length)] * 2, { vol: 0.008, dur: 0.35 });
+      },
+      click: function () { bell(659.25, { vol: 0.03, dur: 0.5 }); bell(987.77, { vol: 0.02, delay: 0.06, dur: 0.5 }); },
+      whoosh: function () { breeze(1.1, 0.025); },
+      blip: function (n) { bell(PENTA[n % PENTA.length], { vol: 0.02, dur: 0.4 }); },
+      chime: function () { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { bell(f, { vol: 0.03, delay: i * 0.11, dur: 1.2 }); }); }
     };
   })();
 
@@ -398,6 +442,58 @@
         });
       });
     });
+  })();
+
+
+  /* ---------- Materias: nivel y buscador ---------- */
+  (function subjects() {
+    var box = document.querySelector('.subjects');
+    if (!box) return;
+    var btns = box.querySelectorAll('[data-level-btn]');
+    var groups = box.querySelectorAll('.subjects__group');
+    var input = $('subjectSearch');
+    var empty = $('subjectEmpty');
+    var level = 'col';
+    var norm = function (t) { return t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+    groups.forEach(function (g) { g.querySelectorAll('li').forEach(function (li) { li.dataset.t = li.textContent; }); });
+
+    function render() {
+      var q = norm(input.value.trim());
+      var any = false;
+      groups.forEach(function (g) {
+        var inLevel = q ? true : g.dataset.level === level;
+        var shown = 0;
+        g.querySelectorAll('li').forEach(function (li) {
+          var t = li.dataset.t, i = norm(t).indexOf(q);
+          var ok = inLevel && (!q || i > -1);
+          li.classList.toggle('is-hidden', !ok);
+          if (ok) {
+            shown++;
+            if (q) {
+              li.textContent = '';
+              li.append(t.slice(0, i));
+              var m = document.createElement('mark'); m.textContent = t.slice(i, i + q.length); li.append(m);
+              li.append(t.slice(i + q.length));
+            } else {
+              li.textContent = t;
+            }
+          }
+        });
+        g.classList.toggle('is-hidden', shown === 0);
+        if (shown) any = true;
+      });
+      empty.hidden = any;
+    }
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        level = b.dataset.levelBtn;
+        btns.forEach(function (x) { var on = x === b; x.classList.toggle('is-active', on); x.setAttribute('aria-pressed', String(on)); });
+        input.value = '';
+        render();
+      });
+    });
+    input.addEventListener('input', render);
+    render();
   })();
 
   /* ---------- Partículas conectadas (canvas) ---------- */

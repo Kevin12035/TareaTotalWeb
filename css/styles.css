@@ -625,3 +625,25 @@ svg { width: 1.25em; height: 1.25em; flex: none; }
   .board__svg .curve, .board__svg .tangent, .ring__fg { stroke-dashoffset: 0; }
   .confetti, .typing { display: none; }
 }
+
+/* Materias */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.subjects { padding: clamp(20px, 4vw, 36px); }
+.subjects__bar { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: center; margin-bottom: 26px; }
+.subjects__switch { display: flex; gap: 8px; }
+.subjects__search { position: relative; flex: 1 1 260px; max-width: 380px; display: flex; align-items: center; }
+.subjects__search svg { position: absolute; left: 16px; color: var(--purple); pointer-events: none; }
+.subjects__search input { width: 100%; padding: 12px 16px 12px 46px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font: inherit; color: var(--ink);
+  box-shadow: var(--shadow); transition: border-color .2s, box-shadow .2s; }
+.subjects__search input:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 4px rgba(120, 72, 181, .15); }
+.subjects__group { margin-top: 22px; }
+.subjects__group:first-of-type { margin-top: 0; }
+.subjects__group h3 { font-size: .8rem; font-family: var(--mono); text-transform: uppercase; letter-spacing: .12em; color: var(--teal-ink); margin-bottom: 12px; }
+.subjects__group.is-hidden, .chips li.is-hidden { display: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips li { padding: 8px 14px; border-radius: 999px; font-size: .9rem; font-weight: 500; color: var(--purple-dark); background: #fff; border: 1px solid var(--line);
+  transition: background .25s, color .25s, transform .25s var(--ease), border-color .25s; animation: cardIn .4s var(--ease) both; }
+.chips li:hover { color: #fff; background: var(--grad); border-color: transparent; transform: translateY(-2px); }
+.chips li mark { background: rgba(242, 162, 58, .35); color: inherit; border-radius: 3px; }
+.subjects__empty { margin-top: 10px; color: var(--muted); }
+.subjects__empty a { color: var(--purple-deep); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
