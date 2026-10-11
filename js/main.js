@@ -341,6 +341,65 @@
     }
   }
 
+
+  /* ---------- Servicios girando alrededor del círculo ---------- */
+  (function orbitWords() {
+    var list = $('orbWords');
+    if (!list) return;
+    var items = Array.prototype.slice.call(list.children);
+    var angle = -Math.PI / 2, radius = 0, last = 0, topIdx = -1, hovering = false;
+    function measure() { radius = list.offsetWidth * 0.45; }
+    function place() {
+      var n = items.length, best = -1, bestY = Infinity;
+      items.forEach(function (li, i) {
+        var a = angle + (i / n) * Math.PI * 2;
+        var x = Math.cos(a) * radius, y = Math.sin(a) * radius;
+        li.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)';
+        if (y < bestY) { bestY = y; best = i; }
+      });
+      if (best !== topIdx) {
+        if (topIdx > -1) items[topIdx].classList.remove('is-top');
+        items[best].classList.add('is-top');
+        topIdx = best;
+      }
+    }
+    function frame(now) {
+      if (last && !hovering) angle += (now - last) * 0.00012;
+      last = now;
+      place();
+      requestAnimationFrame(frame);
+    }
+    measure(); place();
+    window.addEventListener('resize', function () { measure(); place(); });
+    list.parentElement.addEventListener('pointerenter', function () { hovering = true; });
+    list.parentElement.addEventListener('pointerleave', function () { hovering = false; });
+    if (!reduced) requestAnimationFrame(frame);
+  })();
+
+  /* ---------- Filtro de servicios ---------- */
+  (function serviceTabs() {
+    var tabs = document.querySelectorAll('.tab');
+    var cards = document.querySelectorAll('#services .service');
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var f = tab.dataset.filter;
+        tabs.forEach(function (t) { var on = t === tab; t.classList.toggle('is-active', on); t.setAttribute('aria-pressed', String(on)); });
+        var k = 0;
+        cards.forEach(function (c) {
+          var show = f === 'todos' || c.dataset.cat === f;
+          c.classList.toggle('is-hidden', !show);
+          c.classList.remove('is-in');
+          if (show) {
+            c.classList.add('is-visible');
+            void c.offsetWidth;
+            c.style.animationDelay = (k++ * 0.04) + 's';
+            c.classList.add('is-in');
+          }
+        });
+      });
+    });
+  })();
+
   /* ---------- Partículas conectadas (canvas) ---------- */
   (function particles() {
     var cv = $('fxCanvas');
@@ -348,7 +407,7 @@
     var ctx = cv.getContext('2d');
     var dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     var W, H, pts = [], mouse = { x: -9999, y: -9999 }, running = true;
-    var COLORS = ['47,211,217', '167,123,255', '242,162,58'];
+    var COLORS = ['120,72,181', '25,150,156', '226,140,40'];
 
     function size() {
       W = window.innerWidth; H = window.innerHeight;
@@ -376,14 +435,14 @@
         }
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(' + p.c + ',.8)';
+        ctx.fillStyle = 'rgba(' + p.c + ',.55)';
         ctx.fill();
         for (var j = i + 1; j < pts.length; j++) {
           var q = pts[j];
           var ddx = p.x - q.x, ddy = p.y - q.y;
           var d2 = ddx * ddx + ddy * ddy;
           if (d2 < maxD * maxD) {
-            ctx.strokeStyle = 'rgba(' + p.c + ',' + (0.16 * (1 - Math.sqrt(d2) / maxD)).toFixed(3) + ')';
+            ctx.strokeStyle = 'rgba(' + p.c + ',' + (0.14 * (1 - Math.sqrt(d2) / maxD)).toFixed(3) + ')';
             ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
           }
