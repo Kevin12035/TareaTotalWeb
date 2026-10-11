@@ -62,7 +62,7 @@
 <script>
   document.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('a[href*="wa.me/"]');
-    if (a && typeof window.gtag === 'function') window.gtag('event', 'whatsapp_click', { ubicacion: a.getAttribute('data-loc') || 'otro' });
+    if (a && typeof window.gtag === 'function') window.gtag('event', 'click_whatsapp', { ubicacion: a.getAttribute('data-loc') || 'otro' });
   });
 </script>
 </body>

@@ -689,13 +689,5 @@
     window.addEventListener('keydown', resumeOnce);
   }
 
-  // Medición: cada clic a WhatsApp se envía a Google Analytics como "whatsapp_click"
-  document.addEventListener('click', function (e) {
-    var a = e.target.closest && e.target.closest('a[href*="wa.me/"]');
-    if (a && typeof window.gtag === 'function') {
-      window.gtag('event', 'whatsapp_click', { ubicacion: a.getAttribute('data-loc') || 'otro' });
-    }
-  });
-
   $('year').textContent = new Date().getFullYear();
 })();
