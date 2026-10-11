@@ -663,11 +663,14 @@
     });
   });
 
-  /* ---------- Medición de clics a WhatsApp (Google Analytics) ---------- */
+  /* ---------- Medición de clics a WhatsApp (Google Analytics y Google Ads) ---------- */
+  var ADS_ID = 'AW-18491436536';
+  if (typeof window.gtag === 'function') window.gtag('config', ADS_ID);
   document.addEventListener('click', function (e) {
     var a = e.target.closest('a[href*="wa.me"]');
     if (a && typeof window.gtag === 'function') {
       window.gtag('event', 'click_whatsapp', { ubicacion: a.dataset.loc || 'otro' });
+      window.gtag('event', 'conversion', { send_to: ADS_ID + '/qaSnCPKjzZkdEPjbs_FE', value: 1.0, currency: 'USD' });
     }
   });
 
@@ -688,14 +691,6 @@
     window.addEventListener('pointerdown', resumeOnce);
     window.addEventListener('keydown', resumeOnce);
   }
-
-  // Medición: cada clic a WhatsApp se envía a Google Analytics como "whatsapp_click"
-  document.addEventListener('click', function (e) {
-    var a = e.target.closest && e.target.closest('a[href*="wa.me/"]');
-    if (a && typeof window.gtag === 'function') {
-      window.gtag('event', 'whatsapp_click', { ubicacion: a.getAttribute('data-loc') || 'otro' });
-    }
-  });
 
   $('year').textContent = new Date().getFullYear();
 })();
