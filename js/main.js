@@ -663,11 +663,14 @@
     });
   });
 
-  /* ---------- Medición de clics a WhatsApp (Google Analytics) ---------- */
+  /* ---------- Medición de clics a WhatsApp (Google Analytics y Google Ads) ---------- */
+  var ADS_ID = 'AW-18491436536';
+  if (typeof window.gtag === 'function') window.gtag('config', ADS_ID);
   document.addEventListener('click', function (e) {
     var a = e.target.closest('a[href*="wa.me"]');
     if (a && typeof window.gtag === 'function') {
       window.gtag('event', 'click_whatsapp', { ubicacion: a.dataset.loc || 'otro' });
+      window.gtag('event', 'conversion', { send_to: ADS_ID + '/qaSnCPKjzZkdEPjbs_FE', value: 1.0, currency: 'USD' });
     }
   });
 
