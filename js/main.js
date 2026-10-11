@@ -55,11 +55,11 @@
       if (!AC) return false;
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = 0.7;
+      master.gain.value = 0.45;
       var comp = ctx.createDynamicsCompressor();
       master.connect(comp); comp.connect(ctx.destination);
       verb = ctx.createGain();
-      verb.gain.value = 0.35;
+      verb.gain.value = 0.3;
       var conv = makeReverb(2.8);
       verb.connect(conv); conv.connect(master);
       return true;
@@ -71,13 +71,13 @@
       opts = opts || {};
       var t = ctx.currentTime + (opts.delay || 0);
       var dur = opts.dur || 0.6, vol = opts.vol || 0.04;
-      [[1, 1], [2, 0.25], [3.01, 0.08]].forEach(function (h) {
+      [[1, 1], [2, 0.12]].forEach(function (h) {
         var o = ctx.createOscillator();
         var g = ctx.createGain();
         o.type = 'sine';
         o.frequency.value = freq * h[0];
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(vol * h[1], t + 0.008);
+        g.gain.exponentialRampToValueAtTime(vol * h[1], t + 0.03);
         g.gain.exponentialRampToValueAtTime(0.0001, t + dur / h[0]);
         o.connect(g); g.connect(master); g.connect(verb);
         o.start(t); o.stop(t + dur + 0.05);
@@ -118,18 +118,18 @@
       var out = ctx.createGain();
       out.gain.value = 0.0001;
       var lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass'; lp.frequency.value = 1100; lp.Q.value = 0.3;
+      lp.type = 'lowpass'; lp.frequency.value = 700; lp.Q.value = 0.3;
       lp.connect(out); out.connect(master); out.connect(verb);
       var voices = CHORDS[0].map(function (f, i) {
         var o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain();
-        o.type = 'sine'; o2.type = 'triangle';
-        o.frequency.value = f; o2.frequency.value = f; o2.detune.value = 7;
+        o.type = 'sine'; o2.type = 'sine';
+        o.frequency.value = f; o2.frequency.value = f; o2.detune.value = 4;
         g.gain.value = i === 0 ? 0.5 : 0.28;
         o.connect(g); o2.connect(g); g.connect(lp);
         o.start(); o2.start();
         return [o, o2];
       });
-      out.gain.exponentialRampToValueAtTime(0.05, ctx.currentTime + 4);
+      out.gain.exponentialRampToValueAtTime(0.022, ctx.currentTime + 6);
       var idx = 0;
       var timer = setInterval(function () {
         idx = (idx + 1) % CHORDS.length;
@@ -138,7 +138,7 @@
           v.forEach(function (o) { o.frequency.setTargetAtTime(CHORDS[idx][i], t, 1.2); });
         });
         // nota de campanita al cambiar de acorde
-        bell(CHORDS[idx][4] * 2, { vol: 0.012, dur: 2.2 });
+        bell(CHORDS[idx][4] * 2, { vol: 0.005, dur: 2.6 });
       }, 9000);
       ambient = { out: out, voices: voices, timer: timer };
     }
@@ -150,8 +150,8 @@
       var t = ctx.currentTime;
       a.out.gain.cancelScheduledValues(t);
       a.out.gain.setValueAtTime(Math.max(a.out.gain.value, 0.0001), t);
-      a.out.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
-      setTimeout(function () { a.voices.forEach(function (v) { v.forEach(function (o) { o.stop(); }); }); }, 1400);
+      a.out.gain.exponentialRampToValueAtTime(0.0001, t + 2);
+      setTimeout(function () { a.voices.forEach(function (v) { v.forEach(function (o) { o.stop(); }); }); }, 2200);
     }
 
     var PENTA = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
@@ -165,7 +165,7 @@
         if (on) {
           if (ctx.state === 'suspended') ctx.resume();
           startAmbient();
-          bell(523.25, { vol: 0.035 }); bell(659.25, { vol: 0.03, delay: 0.12 }); bell(783.99, { vol: 0.03, delay: 0.24 });
+          bell(523.25, { vol: 0.015, dur: 1 }); bell(659.25, { vol: 0.012, delay: 0.15, dur: 1 }); bell(783.99, { vol: 0.012, delay: 0.3, dur: 1 });
         } else {
           stopAmbient();
         }
@@ -173,14 +173,14 @@
       resume: function () { if (ctx && ctx.state === 'suspended') ctx.resume(); },
       hover: function () {
         var now = Date.now();
-        if (now - lastHover < 90) return;
+        if (now - lastHover < 250) return;
         lastHover = now;
-        bell(PENTA[Math.floor(Math.random() * PENTA.length)] * 2, { vol: 0.008, dur: 0.35 });
+        bell(PENTA[Math.floor(Math.random() * PENTA.length)] * 2, { vol: 0.0025, dur: 0.4 });
       },
-      click: function () { bell(659.25, { vol: 0.03, dur: 0.5 }); bell(987.77, { vol: 0.02, delay: 0.06, dur: 0.5 }); },
-      whoosh: function () { breeze(1.1, 0.025); },
-      blip: function (n) { bell(PENTA[n % PENTA.length], { vol: 0.02, dur: 0.4 }); },
-      chime: function () { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { bell(f, { vol: 0.03, delay: i * 0.11, dur: 1.2 }); }); }
+      click: function () { bell(659.25, { vol: 0.012, dur: 0.6 }); bell(987.77, { vol: 0.007, delay: 0.07, dur: 0.6 }); },
+      whoosh: function () { breeze(1.3, 0.01); },
+      blip: function (n) { bell(PENTA[n % PENTA.length], { vol: 0.008, dur: 0.5 }); },
+      chime: function () { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { bell(f, { vol: 0.012, delay: i * 0.13, dur: 1.3 }); }); }
     };
   })();
 
