@@ -34,7 +34,20 @@
 
   /* ---------- Sonido (Web Audio, sin archivos) ---------- */
   var Sound = (function () {
-    var ctx = null, master = null, ambient = null, enabled = false;
+    var ctx = null, master = null, verb = null, ambient = null, enabled = false;
+
+    // Reverberación suave generada (sin archivos)
+    function makeReverb(seconds) {
+      var len = Math.floor(ctx.sampleRate * seconds);
+      var buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (var ch = 0; ch < 2; ch++) {
+        var d = buf.getChannelData(ch);
+        for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+      }
+      var c = ctx.createConvolver();
+      c.buffer = buf;
+      return c;
+    }
 
     function init() {
       if (ctx) return true;
@@ -42,81 +55,77 @@
       if (!AC) return false;
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = 0.9;
-      master.connect(ctx.destination);
+      master.gain.value = 0.45;
+      var comp = ctx.createDynamicsCompressor();
+      master.connect(comp); comp.connect(ctx.destination);
+      verb = ctx.createGain();
+      verb.gain.value = 0.3;
+      var conv = makeReverb(2.8);
+      verb.connect(conv); conv.connect(master);
       return true;
     }
 
-    function tone(freq, dur, opts) {
+    // Tono "piano eléctrico" cálido (FM suave): ataque redondo, brillo que se apaga
+    function tone(freq, opts) {
       if (!enabled || !ctx) return;
       opts = opts || {};
       var t = ctx.currentTime + (opts.delay || 0);
-      var o = ctx.createOscillator();
-      var g = ctx.createGain();
-      o.type = opts.type || 'sine';
-      o.frequency.setValueAtTime(freq, t);
-      if (opts.to) o.frequency.exponentialRampToValueAtTime(opts.to, t + dur);
+      var dur = opts.dur || 1.2, vol = opts.vol || 0.02;
+      var car = ctx.createOscillator(), mod = ctx.createOscillator();
+      var modGain = ctx.createGain(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+      car.type = 'sine'; mod.type = 'sine';
+      car.frequency.value = freq;
+      mod.frequency.value = freq * 2;
+      // el brillo (índice FM) empieza leve y desaparece rápido: suena a tecla de fieltro
+      modGain.gain.setValueAtTime(freq * 0.6, t);
+      modGain.gain.exponentialRampToValueAtTime(freq * 0.02, t + 0.35);
+      lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 0.2;
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(opts.vol || 0.05, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.025);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(g); g.connect(master);
-      o.start(t); o.stop(t + dur + 0.02);
+      mod.connect(modGain); modGain.connect(car.frequency);
+      car.connect(lp); lp.connect(g); g.connect(master); g.connect(verb);
+      car.start(t); mod.start(t);
+      car.stop(t + dur + 0.05); mod.stop(t + dur + 0.05);
     }
 
-    function noise(dur, from, to, vol) {
-      if (!enabled || !ctx) return;
-      var len = Math.floor(ctx.sampleRate * dur);
-      var buf = ctx.createBuffer(1, len, ctx.sampleRate);
-      var d = buf.getChannelData(0);
-      for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-      var src = ctx.createBufferSource();
-      src.buffer = buf;
-      var f = ctx.createBiquadFilter();
-      f.type = 'bandpass'; f.Q.value = 1.4;
-      var t = ctx.currentTime;
-      f.frequency.setValueAtTime(from, t);
-      f.frequency.exponentialRampToValueAtTime(to, t + dur);
-      var g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(vol || 0.08, t + dur * 0.4);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      src.connect(f); f.connect(g); g.connect(master);
-      src.start(t);
-    }
-
+    // Fondo: un solo tono cálido (quinta abierta) que "respira" muy despacio
     function startAmbient() {
       if (ambient || !ctx) return;
-      var g = ctx.createGain();
-      g.gain.value = 0.0001;
+      var out = ctx.createGain();
+      out.gain.value = 0.0001;
       var lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass'; lp.frequency.value = 420; lp.Q.value = 3;
-      var lfo = ctx.createOscillator();
-      var lfoGain = ctx.createGain();
-      lfo.frequency.value = 0.07; lfoGain.gain.value = 220;
+      lp.type = 'lowpass'; lp.frequency.value = 520; lp.Q.value = 0.4;
+      // el filtro se abre y cierra lentamente (ciclo de ~14 s)
+      var lfo = ctx.createOscillator(), lfoGain = ctx.createGain();
+      lfo.frequency.value = 0.07; lfoGain.gain.value = 160;
       lfo.connect(lfoGain); lfoGain.connect(lp.frequency);
-      var oscs = [55, 82.41, 110.3, 164.8].map(function (f, i) {
-        var o = ctx.createOscillator();
-        o.type = i % 2 ? 'triangle' : 'sawtooth';
-        o.frequency.value = f;
-        o.detune.value = (i - 1.5) * 6;
-        o.connect(lp);
-        o.start();
+      lp.connect(out); out.connect(master); out.connect(verb);
+      var oscs = [[110.0, 0], [110.0, 5], [164.81, -4], [220.0, 3]].map(function (v, i) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = v[0]; o.detune.value = v[1];
+        g.gain.value = i < 2 ? 0.5 : 0.22;
+        o.connect(g); g.connect(lp); o.start();
         return o;
       });
-      lp.connect(g); g.connect(master);
       lfo.start();
-      g.gain.exponentialRampToValueAtTime(0.035, ctx.currentTime + 2.5);
-      ambient = { gain: g, oscs: oscs, lfo: lfo };
+      out.gain.exponentialRampToValueAtTime(0.018, ctx.currentTime + 6);
+      ambient = { out: out, oscs: oscs.concat([lfo]) };
     }
 
     function stopAmbient() {
       if (!ambient) return;
       var a = ambient; ambient = null;
-      a.gain.gain.cancelScheduledValues(ctx.currentTime);
-      a.gain.gain.setValueAtTime(a.gain.gain.value, ctx.currentTime);
-      a.gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
-      setTimeout(function () { a.oscs.forEach(function (o) { o.stop(); }); a.lfo.stop(); }, 700);
+      var t = ctx.currentTime;
+      a.out.gain.cancelScheduledValues(t);
+      a.out.gain.setValueAtTime(Math.max(a.out.gain.value, 0.0001), t);
+      a.out.gain.exponentialRampToValueAtTime(0.0001, t + 2);
+      setTimeout(function () { a.oscs.forEach(function (o) { o.stop(); }); }, 2200);
     }
+
+    // Notas de La mayor (A, C#, E, F#): siempre consonantes entre sí
+    var NOTES = [440.0, 554.37, 659.25, 739.99, 880.0];
+    var lastHover = 0;
 
     return {
       get on() { return enabled; },
@@ -126,17 +135,23 @@
         if (on) {
           if (ctx.state === 'suspended') ctx.resume();
           startAmbient();
-          tone(523, 0.12, { vol: 0.06 }); tone(784, 0.18, { vol: 0.05, delay: 0.08 });
+          // firma sonora de Tarea Total: tres notas ascendentes
+          tone(440.0, { vol: 0.02, dur: 1.6 }); tone(659.25, { vol: 0.016, delay: 0.16, dur: 1.6 }); tone(1108.73, { vol: 0.012, delay: 0.32, dur: 2 });
         } else {
           stopAmbient();
         }
       },
       resume: function () { if (ctx && ctx.state === 'suspended') ctx.resume(); },
-      hover: function () { tone(1500, 0.05, { vol: 0.018 }); },
-      click: function () { tone(660, 0.09, { vol: 0.05, to: 1100, type: 'triangle' }); },
-      whoosh: function () { noise(0.55, 300, 3200, 0.06); },
-      blip: function (n) { tone(880 + n * 120, 0.08, { vol: 0.035 }); },
-      chime: function () { [523, 659, 784, 1046].forEach(function (f, i) { tone(f, 0.5, { vol: 0.04, delay: i * 0.09 }); }); }
+      hover: function () {
+        var now = Date.now();
+        if (now - lastHover < 300) return;
+        lastHover = now;
+        tone(1318.51, { vol: 0.0025, dur: 0.25 });
+      },
+      click: function () { tone(659.25, { vol: 0.016, dur: 0.9 }); tone(880.0, { vol: 0.01, delay: 0.05, dur: 0.9 }); },
+      whoosh: function () { tone(NOTES[Math.floor(Math.random() * 3)] / 2, { vol: 0.012, dur: 1.4 }); },
+      blip: function (n) { tone(NOTES[n % NOTES.length], { vol: 0.01, dur: 0.9 }); },
+      chime: function () { [440.0, 554.37, 659.25, 880.0].forEach(function (f, i) { tone(f, { vol: 0.014, delay: i * 0.12, dur: 1.4 }); }); }
     };
   })();
 
@@ -398,6 +413,58 @@
         });
       });
     });
+  })();
+
+
+  /* ---------- Materias: nivel y buscador ---------- */
+  (function subjects() {
+    var box = document.querySelector('.subjects');
+    if (!box) return;
+    var btns = box.querySelectorAll('[data-level-btn]');
+    var groups = box.querySelectorAll('.subjects__group');
+    var input = $('subjectSearch');
+    var empty = $('subjectEmpty');
+    var level = 'col';
+    var norm = function (t) { return t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+    groups.forEach(function (g) { g.querySelectorAll('li').forEach(function (li) { li.dataset.t = li.textContent; }); });
+
+    function render() {
+      var q = norm(input.value.trim());
+      var any = false;
+      groups.forEach(function (g) {
+        var inLevel = q ? true : g.dataset.level === level;
+        var shown = 0;
+        g.querySelectorAll('li').forEach(function (li) {
+          var t = li.dataset.t, i = norm(t).indexOf(q);
+          var ok = inLevel && (!q || i > -1);
+          li.classList.toggle('is-hidden', !ok);
+          if (ok) {
+            shown++;
+            if (q) {
+              li.textContent = '';
+              li.append(t.slice(0, i));
+              var m = document.createElement('mark'); m.textContent = t.slice(i, i + q.length); li.append(m);
+              li.append(t.slice(i + q.length));
+            } else {
+              li.textContent = t;
+            }
+          }
+        });
+        g.classList.toggle('is-hidden', shown === 0);
+        if (shown) any = true;
+      });
+      empty.hidden = any;
+    }
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        level = b.dataset.levelBtn;
+        btns.forEach(function (x) { var on = x === b; x.classList.toggle('is-active', on); x.setAttribute('aria-pressed', String(on)); });
+        input.value = '';
+        render();
+      });
+    });
+    input.addEventListener('input', render);
+    render();
   })();
 
   /* ---------- Partículas conectadas (canvas) ---------- */
