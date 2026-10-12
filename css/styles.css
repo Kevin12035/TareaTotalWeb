@@ -559,6 +559,7 @@ svg { width: 1.25em; height: 1.25em; flex: none; }
 .page ul { list-style: disc; padding-left: 22px; display: grid; gap: 6px; }
 .page a { color: var(--purple-deep); text-decoration: underline; text-underline-offset: 3px; }
 .page__date { font-size: .9rem; }
+.page a.btn { color: #fff; text-decoration: none; margin-top: 24px; }
 
 /* ---------- Responsive ---------- */
 @media (min-width: 560px) {
